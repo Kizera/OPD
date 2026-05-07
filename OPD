@@ -7,6 +7,9 @@ _G.AutoEquip = _G.AutoEquip or false
 _G.AutoClick = _G.AutoClick or false
 _G.AutoRespawn = _G.AutoRespawn or false
 _G.GhostMode = _G.GhostMode or false
+_G.AutoSkillB = _G.AutoSkillB or false
+_G.AutoSkillV = _G.AutoSkillV or false
+
 local selectedMobs = {}
 
 -- === 1. ฟังก์ชันจัดการตัวละคร ===
@@ -20,31 +23,62 @@ local function applyGhostMode(char)
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.Transparency = 1
-            elseif part:IsA("Decal") then
-                part.Transparency = 1
-            end
+            elseif part:IsA("Decal") then part.Transparency = 1 end
         end
     end
 end
 
--- === 2. ระบบทำงานหลัก ===
+-- === 2. ระบบ Auto Skills (Flare V & B) ===
+local function fireSkillV()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
+        
+        if remote then
+            -- สกิล V ยิงแค่ชื่อสกิล ไม่ต้องการพิกัด
+            remote:FireServer("FlarePower4")
+        end
+    end)
+end
 
--- Auto Respawn & Ghost Apply
+local function fireSkillB()
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
+        
+        if remote and hrp then
+            -- จังหวะที่ 1: เริ่มชาร์จ (ลงเท้าตัวเอง)
+            remote:FireServer("FlarePower5", "StartCharging", hrp.CFrame, hrp, "Left")
+            
+            task.wait(0.1) -- หน่วงเวลาชาร์จ 0.1 วิ (ปรับให้เร็วสุดเท่าที่ดาเมจจะออก)
+            
+            -- จังหวะที่ 2: ปล่อยพลัง (ลงเท้าตัวเอง)
+            remote:FireServer("FlarePower5", "StopCharging", hrp.CFrame, hrp, 6)
+        end
+    end)
+end
+
+task.spawn(function()
+    while task.wait(0.5) do -- สแปมทุกๆ 0.5 วินาที
+        if _G.AutoSkillV then fireSkillV() end
+        if _G.AutoSkillB then fireSkillB() end
+    end
+end)
+
+-- === 3. ระบบทำงานอื่นๆ ===
 task.spawn(function()
     while task.wait(1) do
         local char = player.Character
-        if _G.AutoRespawn then
-            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then
-                pcall(function()
-                    game:GetService("ReplicatedStorage"):WaitForChild("Connections"):WaitForChild("Spawn"):FireServer(2)
-                end)
-            end
+        if _G.AutoRespawn and (not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0) then
+            pcall(function() game:GetService("ReplicatedStorage").Connections.Spawn:FireServer(2) end)
         end
         if char and _G.GhostMode then applyGhostMode(char) end
     end
 end)
 
--- Auto Equip & Click
 task.spawn(function()
     while task.wait(0.1) do
         local char = player.Character
@@ -58,20 +92,16 @@ task.spawn(function()
     end
 end)
 
--- Auto Warp
 task.spawn(function()
     while task.wait() do
         if _G.AutoWarp then
             pcall(function()
                 local char = getCharacter()
                 local hrp = char:WaitForChild("HumanoidRootPart", 5)
-                if not hrp then return end
-                
                 for _, enemy in pairs(workspace.Enemies:GetChildren()) do
                     if selectedMobs[enemy.Name] and _G.AutoWarp then
                         local hum = enemy:FindFirstChild("Humanoid")
                         local ehrp = enemy:FindFirstChild("HumanoidRootPart")
-                        
                         if hum and hum.Health > 0 and ehrp then
                             while hum.Health > 0 and _G.AutoWarp and char.Humanoid.Health > 0 do
                                 hrp.CFrame = ehrp.CFrame * CFrame.new(0, 0, 3.5)
@@ -85,21 +115,21 @@ task.spawn(function()
     end
 end)
 
--- === 3. GUI Layout ===
+-- === 4. GUI Layout ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaKrizmaV5"
+ScreenGui.Name = "LunaKrizmaV7"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ResetOnSpawn = false
 
 local ToggleMenuBtn = Instance.new("TextButton")
 ToggleMenuBtn.Size = UDim2.new(0, 100, 0, 30)
 ToggleMenuBtn.Position = UDim2.new(0, 10, 0.9, -10)
-ToggleMenuBtn.Text = "Open/Close UI"
+ToggleMenuBtn.Text = "Menu"
 ToggleMenuBtn.Parent = ScreenGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 250, 0, 500)
-MainFrame.Position = UDim2.new(0.5, -125, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 250, 0, 580)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -290)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -113,12 +143,10 @@ local function createBtn(text, pos, varName)
     btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Parent = MainFrame
-    
     btn.MouseButton1Click:Connect(function()
         _G[varName] = not _G[varName]
         btn.Text = text .. (_G[varName] and " (ON)" or " (OFF)")
         btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-        if varName == "GhostMode" and player.Character then applyGhostMode(player.Character) end
     end)
     return btn
 end
@@ -128,10 +156,12 @@ createBtn("Auto Equip Krizma", UDim2.new(0, 10, 0, 80), "AutoEquip")
 createBtn("Auto Click", UDim2.new(0, 10, 0, 120), "AutoClick")
 createBtn("Auto Respawn", UDim2.new(0, 10, 0, 160), "AutoRespawn")
 createBtn("Ghost Mode", UDim2.new(0, 10, 0, 200), "GhostMode")
+createBtn("Auto Skill B (Flare Nuke)", UDim2.new(0, 10, 0, 240), "AutoSkillB")
+createBtn("Auto Skill V (Flare Burst)", UDim2.new(0, 10, 0, 280), "AutoSkillV")
 
 local MobListScroll = Instance.new("ScrollingFrame")
-MobListScroll.Size = UDim2.new(1, -20, 1, -310)
-MobListScroll.Position = UDim2.new(0, 10, 0, 245)
+MobListScroll.Size = UDim2.new(1, -20, 1, -380)
+MobListScroll.Position = UDim2.new(0, 10, 0, 325)
 MobListScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MobListScroll.Parent = MainFrame
 
@@ -144,44 +174,23 @@ RefreshBtn.Position = UDim2.new(0, 10, 1, -40)
 RefreshBtn.Text = "Refresh Mobs"
 RefreshBtn.Parent = MainFrame
 
--- === 4. ฟังก์ชันอัปเดตและเรียงรายชื่อมอนสเตอร์ (Sorting) ===
 local function updateList()
     for _, v in pairs(MobListScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-    
     local unique = {}
-    for _, e in pairs(workspace.Enemies:GetChildren()) do 
-        if not unique[e.Name] then unique[e.Name] = true end 
-    end
-    
-    local sortedMobs = {}
-    for name, _ in pairs(unique) do
-        -- สกัดตัวเลขเลเวลออกจากชื่อ (เช่น "Lv710" -> 710)
-        local levelStr = string.match(name, "%d+")
-        local levelNum = levelStr and tonumber(levelStr) or 0
-        table.insert(sortedMobs, {Name = name, Level = levelNum})
-    end
-    
-    -- เรียงลำดับจากเลเวลน้อยไปมาก
-    table.sort(sortedMobs, function(a, b)
-        if a.Level == b.Level then
-            return a.Name < b.Name -- ถ้าเลเวลเท่ากัน ให้เรียงตามตัวอักษร
-        end
-        return a.Level < b.Level
-    end)
-    
-    -- สร้างปุ่มตามลำดับที่เรียงแล้ว
-    for _, mobData in ipairs(sortedMobs) do
-        local name = mobData.Name
+    for _, e in pairs(workspace.Enemies:GetChildren()) do if not unique[e.Name] then unique[e.Name] = true end end
+    local sorted = {}
+    for name, _ in pairs(unique) do table.insert(sorted, {Name = name, Level = tonumber(string.match(name, "%d+")) or 0}) end
+    table.sort(sorted, function(a,b) return a.Level < b.Level end)
+    for _, data in ipairs(sorted) do
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, 0, 0, 30)
-        b.Text = name
-        b.BackgroundColor3 = selectedMobs[name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+        b.Text = data.Name
+        b.BackgroundColor3 = selectedMobs[data.Name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
         b.TextColor3 = Color3.fromRGB(255, 255, 255)
         b.Parent = MobListScroll
-        
         b.MouseButton1Click:Connect(function()
-            selectedMobs[name] = not selectedMobs[name]
-            b.BackgroundColor3 = selectedMobs[name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+            selectedMobs[data.Name] = not selectedMobs[data.Name]
+            b.BackgroundColor3 = selectedMobs[data.Name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
         end)
     end
     MobListScroll.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
@@ -189,5 +198,4 @@ end
 
 RefreshBtn.MouseButton1Click:Connect(updateList)
 ToggleMenuBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
-
 updateList()
