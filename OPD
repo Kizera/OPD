@@ -1,116 +1,156 @@
-local player = game:GetService("Players").LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local rootPart = character:WaitForChild("HumanoidRootPart")
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
 
-local autoKill = false
-local platform = nil
+local autoWarp = false
+local selectedMobs = {} -- เก็บรายชื่อมอนที่ติ๊กเลือก
 
--- === 1. ระบบฐานลอยฟ้า (หนีตายไปอยู่ข้างบน) ===
-local function createSkyBase()
-    if not platform then
-        platform = Instance.new("Part")
-        platform.Size = Vector3.new(50, 1, 50)
-        platform.Position = Vector3.new(rootPart.Position.X, 10000, rootPart.Position.Z)
-        platform.Anchored = true
-        platform.BrickColor = BrickColor.new("Electric blue")
-        platform.Material = Enum.Material.Neon
-        platform.Parent = workspace
+-- === 1. สร้าง GUI หลัก ===
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GeminiSmartFarm"
+ScreenGui.Parent = game.CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 250, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Text = "⚡ เจม: เลือกมอนสเตอร์ (Backstab)"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Title.BorderSizePixel = 0
+Title.Parent = MainFrame
+
+-- ปุ่มเริ่ม/หยุดวาร์ป
+local ToggleWarpBtn = Instance.new("TextButton")
+ToggleWarpBtn.Size = UDim2.new(1, -20, 0, 40)
+ToggleWarpBtn.Position = UDim2.new(0, 10, 1, -50)
+ToggleWarpBtn.Text = "▶ เริ่มวาร์ปไปฟัน (OFF)"
+ToggleWarpBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+ToggleWarpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleWarpBtn.Parent = MainFrame
+
+-- ปุ่มรีเฟรชรายชื่อมอนสเตอร์
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Size = UDim2.new(1, -20, 0, 30)
+RefreshBtn.Position = UDim2.new(0, 10, 0, 40)
+RefreshBtn.Text = "🔄 โหลดรายชื่อมอนสเตอร์ใหม่"
+RefreshBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshBtn.Parent = MainFrame
+
+-- พื้นที่รายชื่อมอนสเตอร์ (Scroll)
+local MobListScroll = Instance.new("ScrollingFrame")
+MobListScroll.Size = UDim2.new(1, -20, 1, -140)
+MobListScroll.Position = UDim2.new(0, 10, 0, 80)
+MobListScroll.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MobListScroll.BorderSizePixel = 0
+MobListScroll.ScrollBarThickness = 5
+MobListScroll.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = MobListScroll
+UIListLayout.Padding = UDim.new(0, 5)
+
+-- === 2. ระบบจัดการรายชื่อมอนสเตอร์ ===
+local function refreshMobList()
+    -- ลบปุ่มเก่าออกให้หมดก่อน
+    for _, child in pairs(MobListScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
     end
-    rootPart.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
+
+    local uniqueMobs = {}
+    -- หาชื่อมอนสเตอร์ที่ไม่ซ้ำกันในแมพ
+    for _, enemy in pairs(workspace:WaitForChild("Enemies"):GetChildren()) do
+        if enemy:IsA("Model") and not uniqueMobs[enemy.Name] then
+            uniqueMobs[enemy.Name] = true
+        end
+    end
+
+    -- สร้างปุ่มสำหรับมอนแต่ละชื่อ
+    for mobName, _ in pairs(uniqueMobs) do
+        local mobBtn = Instance.new("TextButton")
+        mobBtn.Size = UDim2.new(1, 0, 0, 30)
+        mobBtn.Text = mobName
+        
+        -- เช็คสถานะเก่าว่าเคยเลือกไว้มั้ย
+        if selectedMobs[mobName] then
+            mobBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0) -- สีเขียว (เลือก)
+        else
+            mobBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60) -- สีเทา (ไม่ได้เลือก)
+        end
+        
+        mobBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        mobBtn.Parent = MobListScroll
+
+        -- ระบบติ๊กเลือกมอน
+        mobBtn.MouseButton1Click:Connect(function()
+            if selectedMobs[mobName] then
+                selectedMobs[mobName] = nil -- เอาออก
+                mobBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            else
+                selectedMobs[mobName] = true -- เลือก
+                mobBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+            end
+        end)
+    end
+    
+    -- ปรับขนาด Scroll ตามจำนวนปุ่ม
+    MobListScroll.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
 end
 
--- === 2. ระบบ AoE Ground Nuke (สแปมสกิลลงพื้น) ===
+-- === 3. ระบบวาร์ปไปด้านหลังเป้าหมาย ===
 task.spawn(function()
-    while task.wait(0.1) do -- ความเร็วในการสแปม (0.1 วิ)
-        if autoKill then
+    while task.wait() do -- รันลูปเช็คตลอดเวลา
+        if autoWarp then
             pcall(function()
-                local char = player.Character
-                if not char then return end
+                local character = player.Character
+                if not character or not character:FindFirstChild("HumanoidRootPart") then return end
                 
-                -- ตรวจหาพลัง Flare ในตัวละครเรา
-                local powers = char:FindFirstChild("Powers")
-                local flare = powers and powers:FindFirstChild("Flare")
-                local remote = flare and flare:FindFirstChild("RemoteEvent")
-                
-                if remote then
-                    -- Argument ชุดใหม่ที่ลูกพี่หามา (เล็งเป้าไปที่พื้นตรง IslandCliffs)
-                    local args = {
-                        "FlarePower2",
-                        "StopCharging",
-                        CFrame.new(4594.9453125, 214.60000610351562, 5274.6884765625, -0.8987636566162109, -0.08513263612985611, 0.43008872866630554, -7.450580596923828e-09, 0.9809670448303223, 0.19417457282543182, -0.438433438539505, 0.17451705038547516, -0.8816574811935425),
-                        workspace:WaitForChild("IslandCliffs"):WaitForChild("Path"):WaitForChild("Part"),
-                        4
-                    }
-                    
-                    -- ยิงคำสั่งอัดลงพื้นรัวๆ
-                    remote:FireServer(unpack(args))
+                -- วนหามอนสเตอร์ที่มีชื่อตรงกับที่เราเลือกไว้
+                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+                    -- เช็คว่าชื่อมอนอยู่ใน List ที่เลือก, มีเลือด, และปุ่มวาร์ปยังเปิดอยู่
+                    if selectedMobs[enemy.Name] and autoWarp then
+                        local hum = enemy:FindFirstChild("Humanoid")
+                        local hrp = enemy:FindFirstChild("HumanoidRootPart")
+                        
+                        if hum and hum.Health > 0 and hrp then
+                            -- ล็อกเป้าตัวนี้จนกว่าจะตาย
+                            while hum.Health > 0 and autoWarp do
+                                -- วาร์ปไปด้านหลังมอนสเตอร์ 3.5 หน่วย (ปรับระยะได้ตรง CFrame.new)
+                                character.HumanoidRootPart.CFrame = hrp.CFrame * CFrame.new(0, 0, 3.5)
+                                task.wait(0.05) -- ความเร็วในการเกาะหลัง
+                            end
+                        end
+                    end
                 end
             end)
         end
     end
 end)
 
--- === 3. สร้าง GUI ควบคุม (หน้าต่างเดิม ใช้งานง่าย) ===
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaXL_AoENuke"
-ScreenGui.Parent = game.CoreGui
+-- === 4. การทำงานของปุ่มควบคุม ===
+RefreshBtn.MouseButton1Click:Connect(function()
+    refreshMobList()
+end)
 
-local ToggleUI = Instance.new("TextButton")
-ToggleUI.Name = "ToggleUI"
-ToggleUI.Parent = ScreenGui
-ToggleUI.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-ToggleUI.Position = UDim2.new(0, 10, 0.9, 0)
-ToggleUI.Size = UDim2.new(0, 100, 0, 40)
-ToggleUI.Text = "Close Menu"
-ToggleUI.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-MainFrame.BorderSizePixel = 0
-MainFrame.Position = UDim2.new(0.5, -100, 0.5, -100)
-MainFrame.Size = UDim2.new(0, 200, 0, 200)
-MainFrame.Active = true
-MainFrame.Draggable = true
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "Luna XL: AoE Nuke"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.BackgroundTransparency = 1
-Title.Parent = MainFrame
-
-local KillBtn = Instance.new("TextButton")
-KillBtn.Size = UDim2.new(0.8, 0, 0, 40)
-KillBtn.Position = UDim2.new(0.1, 0, 0.25, 0)
-KillBtn.Text = "เปิดสแปมสกิล (Nuke)"
-KillBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-KillBtn.Parent = MainFrame
-
-local SkyBtn = Instance.new("TextButton")
-SkyBtn.Size = UDim2.new(0.8, 0, 0, 40)
-SkyBtn.Position = UDim2.new(0.1, 0, 0.6, 0)
-SkyBtn.Text = "ขึ้นฐานลอยฟ้า (SKY)"
-SkyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
-SkyBtn.Parent = MainFrame
-
-KillBtn.MouseButton1Click:Connect(function()
-    autoKill = not autoKill
-    if autoKill then
-        KillBtn.Text = "ปิดสแปมสกิล"
-        KillBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+ToggleWarpBtn.MouseButton1Click:Connect(function()
+    autoWarp = not autoWarp
+    if autoWarp then
+        ToggleWarpBtn.Text = "⏹ หยุดวาร์ป (ON)"
+        ToggleWarpBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
     else
-        KillBtn.Text = "เปิดสแปมสกิล (Nuke)"
-        KillBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        ToggleWarpBtn.Text = "▶ เริ่มวาร์ปไปฟัน (OFF)"
+        ToggleWarpBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
     end
 end)
 
-SkyBtn.MouseButton1Click:Connect(function()
-    createSkyBase()
-end)
-
-ToggleUI.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-    ToggleUI.Text = MainFrame.Visible and "Close Menu" or "Open Menu"
-end)
+-- โหลดรายชื่อมอนสเตอร์ครั้งแรกเมื่อรันสคริปต์
+refreshMobList()
