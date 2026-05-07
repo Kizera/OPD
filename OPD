@@ -1,134 +1,79 @@
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
 
-local autoWarp = false
-local autoEquip = false
-local autoClick = false
-local autoRespawn = false
+-- ตัวแปรสถานะ
+_G.AutoWarp = _G.AutoWarp or false
+_G.AutoEquip = _G.AutoEquip or false
+_G.AutoClick = _G.AutoClick or false
+_G.AutoRespawn = _G.AutoRespawn or false
+_G.GhostMode = _G.GhostMode or false
 local selectedMobs = {}
 
--- === 1. ฟังก์ชันช่วย (Helper Functions) ===
-local function equipKrizma()
-    local backpack = player:FindFirstChild("Backpack")
-    local char = player.Character
-    if char and backpack then
-        local tool = backpack:FindFirstChild("Krizma")
-        if tool then
-            char:WaitForChild("Humanoid"):EquipTool(tool)
+-- === 1. ฟังก์ชันจัดการตัวละคร ===
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local function applyGhostMode(char)
+    if _G.GhostMode then
+        task.wait(0.5)
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.Transparency = 1
+            elseif part:IsA("Decal") then
+                part.Transparency = 1
+            end
         end
     end
 end
 
--- === 2. สร้าง GUI หลัก ===
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaKrizmaFarm_V3"
-ScreenGui.Parent = game.CoreGui
+-- === 2. ระบบทำงานหลัก ===
 
--- ปุ่ม เปิด/ปิด เมนู (ปุ่มเล็ก)
-local ToggleMenuBtn = Instance.new("TextButton")
-ToggleMenuBtn.Size = UDim2.new(0, 80, 0, 30)
-ToggleMenuBtn.Position = UDim2.new(0, 10, 0.9, -10)
-ToggleMenuBtn.Text = "Toggle Menu"
-ToggleMenuBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-ToggleMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleMenuBtn.Parent = ScreenGui
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 250, 0, 460) -- เพิ่มขนาดรองรับปุ่มใหม่
-MainFrame.Position = UDim2.new(0.5, -125, 0.5, -230)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "⚡ เจม: Krizma V3 + Auto Spawn"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-Title.Parent = MainFrame
-
--- ฟังก์ชันสร้างปุ่ม Toggle
-local function createToggle(name, text, pos, default)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(1, -20, 0, 35)
-    btn.Position = pos
-    btn.Text = text .. (default and " (ON)" or " (OFF)")
-    btn.BackgroundColor3 = default and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Parent = MainFrame
-    return btn
-end
-
-local WarpBtn = createToggle("WarpBtn", "Auto Warp", UDim2.new(0, 10, 0, 40), false)
-local EquipBtn = createToggle("EquipBtn", "Auto Equip Krizma", UDim2.new(0, 10, 0, 80), false)
-local ClickBtn = createToggle("ClickBtn", "Auto Click", UDim2.new(0, 10, 0, 120), false)
-local RespawnBtn = createToggle("RespawnBtn", "Auto Respawn", UDim2.new(0, 10, 0, 160), false)
-
--- ส่วนรายชื่อมอนสเตอร์
-local MobListScroll = Instance.new("ScrollingFrame")
-MobListScroll.Size = UDim2.new(1, -20, 1, -270)
-MobListScroll.Position = UDim2.new(0, 10, 0, 205)
-MobListScroll.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-MobListScroll.Parent = MainFrame
-
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = MobListScroll
-
-local RefreshBtn = Instance.new("TextButton")
-RefreshBtn.Size = UDim2.new(1, -20, 0, 30)
-RefreshBtn.Position = UDim2.new(0, 10, 1, -40)
-RefreshBtn.Text = "🔄 Refresh Mob List"
-RefreshBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
-RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-RefreshBtn.Parent = MainFrame
-
--- === 3. ระบบทำงาน (Loops) ===
-
--- Auto Respawn Loop
+-- Auto Respawn & Ghost Apply
 task.spawn(function()
     while task.wait(1) do
-        if autoRespawn then
-            local char = player.Character
+        local char = player.Character
+        if _G.AutoRespawn then
             if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then
                 pcall(function()
-                    local args = { 2 }
-                    game:GetService("ReplicatedStorage"):WaitForChild("Connections"):WaitForChild("Spawn"):FireServer(unpack(args))
+                    game:GetService("ReplicatedStorage"):WaitForChild("Connections"):WaitForChild("Spawn"):FireServer(2)
                 end)
             end
         end
+        if char and _G.GhostMode then applyGhostMode(char) end
     end
 end)
 
--- Auto Equip & Click Loop
+-- Auto Equip & Click
 task.spawn(function()
     while task.wait(0.1) do
-        if autoEquip then equipKrizma() end
-        if autoClick then
-            local char = player.Character
-            if char and char:FindFirstChild("Krizma") then
-                char.Krizma:Activate()
-            end
+        local char = player.Character
+        if char and _G.AutoEquip then
+            local tool = player.Backpack:FindFirstChild("Krizma")
+            if tool then char.Humanoid:EquipTool(tool) end
+        end
+        if char and _G.AutoClick and char:FindFirstChild("Krizma") then
+            char.Krizma:Activate()
         end
     end
 end)
 
--- Auto Warp Loop
+-- Auto Warp
 task.spawn(function()
     while task.wait() do
-        if autoWarp then
+        if _G.AutoWarp then
             pcall(function()
-                local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                local char = getCharacter()
+                local hrp = char:WaitForChild("HumanoidRootPart", 5)
                 if not hrp then return end
                 
                 for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                    if selectedMobs[enemy.Name] and autoWarp then
+                    if selectedMobs[enemy.Name] and _G.AutoWarp then
                         local hum = enemy:FindFirstChild("Humanoid")
                         local ehrp = enemy:FindFirstChild("HumanoidRootPart")
+                        
                         if hum and hum.Health > 0 and ehrp then
-                            while hum.Health > 0 and autoWarp do
+                            while hum.Health > 0 and _G.AutoWarp and char.Humanoid.Health > 0 do
                                 hrp.CFrame = ehrp.CFrame * CFrame.new(0, 0, 3.5)
                                 task.wait(0.01)
                             end
@@ -140,19 +85,100 @@ task.spawn(function()
     end
 end)
 
--- === 4. จัดการ Events ===
+-- === 3. GUI Layout ===
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LunaKrizmaV5"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
 
+local ToggleMenuBtn = Instance.new("TextButton")
+ToggleMenuBtn.Size = UDim2.new(0, 100, 0, 30)
+ToggleMenuBtn.Position = UDim2.new(0, 10, 0.9, -10)
+ToggleMenuBtn.Text = "Open/Close UI"
+ToggleMenuBtn.Parent = ScreenGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 250, 0, 500)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -250)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local function createBtn(text, pos, varName)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 35)
+    btn.Position = pos
+    btn.Text = text .. (_G[varName] and " (ON)" or " (OFF)")
+    btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Parent = MainFrame
+    
+    btn.MouseButton1Click:Connect(function()
+        _G[varName] = not _G[varName]
+        btn.Text = text .. (_G[varName] and " (ON)" or " (OFF)")
+        btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+        if varName == "GhostMode" and player.Character then applyGhostMode(player.Character) end
+    end)
+    return btn
+end
+
+createBtn("Auto Warp", UDim2.new(0, 10, 0, 40), "AutoWarp")
+createBtn("Auto Equip Krizma", UDim2.new(0, 10, 0, 80), "AutoEquip")
+createBtn("Auto Click", UDim2.new(0, 10, 0, 120), "AutoClick")
+createBtn("Auto Respawn", UDim2.new(0, 10, 0, 160), "AutoRespawn")
+createBtn("Ghost Mode", UDim2.new(0, 10, 0, 200), "GhostMode")
+
+local MobListScroll = Instance.new("ScrollingFrame")
+MobListScroll.Size = UDim2.new(1, -20, 1, -310)
+MobListScroll.Position = UDim2.new(0, 10, 0, 245)
+MobListScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MobListScroll.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = MobListScroll
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Size = UDim2.new(1, -20, 0, 30)
+RefreshBtn.Position = UDim2.new(0, 10, 1, -40)
+RefreshBtn.Text = "Refresh Mobs"
+RefreshBtn.Parent = MainFrame
+
+-- === 4. ฟังก์ชันอัปเดตและเรียงรายชื่อมอนสเตอร์ (Sorting) ===
 local function updateList()
     for _, v in pairs(MobListScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    
     local unique = {}
-    for _, e in pairs(workspace.Enemies:GetChildren()) do if not unique[e.Name] then unique[e.Name] = true end end
+    for _, e in pairs(workspace.Enemies:GetChildren()) do 
+        if not unique[e.Name] then unique[e.Name] = true end 
+    end
+    
+    local sortedMobs = {}
     for name, _ in pairs(unique) do
+        -- สกัดตัวเลขเลเวลออกจากชื่อ (เช่น "Lv710" -> 710)
+        local levelStr = string.match(name, "%d+")
+        local levelNum = levelStr and tonumber(levelStr) or 0
+        table.insert(sortedMobs, {Name = name, Level = levelNum})
+    end
+    
+    -- เรียงลำดับจากเลเวลน้อยไปมาก
+    table.sort(sortedMobs, function(a, b)
+        if a.Level == b.Level then
+            return a.Name < b.Name -- ถ้าเลเวลเท่ากัน ให้เรียงตามตัวอักษร
+        end
+        return a.Level < b.Level
+    end)
+    
+    -- สร้างปุ่มตามลำดับที่เรียงแล้ว
+    for _, mobData in ipairs(sortedMobs) do
+        local name = mobData.Name
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, 0, 0, 30)
         b.Text = name
         b.BackgroundColor3 = selectedMobs[name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
         b.TextColor3 = Color3.fromRGB(255, 255, 255)
         b.Parent = MobListScroll
+        
         b.MouseButton1Click:Connect(function()
             selectedMobs[name] = not selectedMobs[name]
             b.BackgroundColor3 = selectedMobs[name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
@@ -160,22 +186,6 @@ local function updateList()
     end
     MobListScroll.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
 end
-
-local function toggleSetting(btn, varName, text)
-    if varName == "autoWarp" then autoWarp = not autoWarp
-    elseif varName == "autoEquip" then autoEquip = not autoEquip
-    elseif varName == "autoClick" then autoClick = not autoClick
-    elseif varName == "autoRespawn" then autoRespawn = not autoRespawn end
-    
-    local active = (varName == "autoWarp" and autoWarp) or (varName == "autoEquip" and autoEquip) or (varName == "autoClick" and autoClick) or (varName == "autoRespawn" and autoRespawn)
-    btn.Text = text .. (active and " (ON)" or " (OFF)")
-    btn.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-end
-
-WarpBtn.MouseButton1Click:Connect(function() toggleSetting(WarpBtn, "autoWarp", "Auto Warp") end)
-EquipBtn.MouseButton1Click:Connect(function() toggleSetting(EquipBtn, "autoEquip", "Auto Equip Krizma") end)
-ClickBtn.MouseButton1Click:Connect(function() toggleSetting(ClickBtn, "autoClick", "Auto Click") end)
-RespawnBtn.MouseButton1Click:Connect(function() toggleSetting(RespawnBtn, "autoRespawn", "Auto Respawn") end)
 
 RefreshBtn.MouseButton1Click:Connect(updateList)
 ToggleMenuBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
