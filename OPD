@@ -1,10 +1,10 @@
-local Library = {} -- สร้าง GUI แบบง่ายๆ สไตล์พี่ลูน่า
 local player = game.Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
-local bringing = false
+local expandHitbox = false
 local platform = nil
+local MaxSize = 2048 -- ขนาดกว้างสุดที่ขยายได้
 
 -- === 1. ระบบสร้างพื้นที่ลอยฟ้า (Safe Zone) ===
 local function createSkyBase()
@@ -16,26 +16,24 @@ local function createSkyBase()
         platform.BrickColor = BrickColor.new("Electric blue")
         platform.Material = Enum.Material.Neon
         platform.Parent = workspace
-        
-        -- วาร์ปตัวเราขึ้นไป
-        rootPart.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
-    else
-        rootPart.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
     end
+    -- วาร์ปตัวเราขึ้นไป
+    rootPart.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
 end
 
--- === 2. ระบบรวบมอนสเตอร์ (Mob Bringer) ===
+-- === 2. ระบบขยาย Hitbox มอนสเตอร์ (ลดอาการแลค) ===
 task.spawn(function()
-    while task.wait(0.1) do
-        if bringing then
+    while task.wait(1) do
+        if expandHitbox then
             pcall(function()
                 for _, enemy in pairs(workspace.Enemies:GetChildren()) do
                     if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
-                        local enemyHumanoid = enemy:FindFirstChild("Humanoid")
-                        if enemyHumanoid and enemyHumanoid.Health > 0 then
-                            -- รวบมาไว้ข้างหน้าตัวเรา 5 หน่วย
-                            enemy.HumanoidRootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -5)
-                            enemy.HumanoidRootPart.CanCollide = false -- ป้องกันมอนดีด
+                        local hum = enemy:FindFirstChild("Humanoid")
+                        if hum and hum.Health > 0 then
+                            local hrp = enemy.HumanoidRootPart
+                            hrp.Size = Vector3.new(MaxSize, MaxSize, MaxSize)
+                            hrp.Transparency = 0.95 -- โปรงใสจะได้ไม่บังจอขาว
+                            hrp.CanCollide = false -- ปิดการชนเพื่อลดการคำนวณฟิสิกส์
                         end
                     end
                 end
@@ -46,17 +44,11 @@ end)
 
 -- === 3. สร้าง GUI ควบคุม ===
 local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local Title = Instance.new("TextLabel")
-local BringBtn = Instance.new("TextButton")
-local StopBtn = Instance.new("TextButton")
-local SkyBtn = Instance.new("TextButton")
-local ToggleUI = Instance.new("TextButton")
-
-ScreenGui.Name = "LunaProjectXL"
+ScreenGui.Name = "LunaProjectXL_NoLag"
 ScreenGui.Parent = game.CoreGui
 
 -- ปุ่มเปิด/ปิด GUI (ล่างซ้าย)
+local ToggleUI = Instance.new("TextButton")
 ToggleUI.Name = "ToggleUI"
 ToggleUI.Parent = ScreenGui
 ToggleUI.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
@@ -65,51 +57,49 @@ ToggleUI.Size = UDim2.new(0, 100, 0, 40)
 ToggleUI.Text = "Close Menu"
 ToggleUI.TextColor3 = Color3.fromRGB(255, 255, 255)
 
+local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Position = UDim2.new(0.5, -100, 0.5, -100)
-MainFrame.Size = UDim2.new(0, 200, 0, 250)
+MainFrame.Size = UDim2.new(0, 200, 0, 200)
 MainFrame.Active = true
 MainFrame.Draggable = true
 
+local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "Luna XL Hub"
+Title.Text = "Luna XL: No-Lag Farm"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.BackgroundTransparency = 1
 Title.Parent = MainFrame
 
--- ปุ่มรวบ (Bring)
-BringBtn.Size = UDim2.new(0.8, 0, 0, 40)
-BringBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
-BringBtn.Text = "รวบมอน (GATHER)"
-BringBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-BringBtn.Parent = MainFrame
-
--- ปุ่มปล่อย (Stop/Release)
-StopBtn.Size = UDim2.new(0.8, 0, 0, 40)
-StopBtn.Position = UDim2.new(0.1, 0, 0.45, 0)
-StopBtn.Text = "ปล่อยมอน (STOP)"
-StopBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-StopBtn.Parent = MainFrame
+-- ปุ่ม Hitbox
+local HitboxBtn = Instance.new("TextButton")
+HitboxBtn.Size = UDim2.new(0.8, 0, 0, 40)
+HitboxBtn.Position = UDim2.new(0.1, 0, 0.25, 0)
+HitboxBtn.Text = "เปิด Hitbox คลุมแมพ"
+HitboxBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+HitboxBtn.Parent = MainFrame
 
 -- ปุ่มฐานลอยฟ้า
+local SkyBtn = Instance.new("TextButton")
 SkyBtn.Size = UDim2.new(0.8, 0, 0, 40)
-SkyBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
+SkyBtn.Position = UDim2.new(0.1, 0, 0.6, 0)
 SkyBtn.Text = "ขึ้นฐานลอยฟ้า (SKY)"
 SkyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 SkyBtn.Parent = MainFrame
 
 -- โค้ดปุ่มทำงาน
-BringBtn.MouseButton1Click:Connect(function()
-    bringing = true
-    print("รวบมอนสเตอร์แล้ว!")
-end)
-
-StopBtn.MouseButton1Click:Connect(function()
-    bringing = false
-    print("หยุดรวบมอนสเตอร์")
+HitboxBtn.MouseButton1Click:Connect(function()
+    expandHitbox = not expandHitbox
+    if expandHitbox then
+        HitboxBtn.Text = "ปิด Hitbox"
+        HitboxBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    else
+        HitboxBtn.Text = "เปิด Hitbox คลุมแมพ"
+        HitboxBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    end
 end)
 
 SkyBtn.MouseButton1Click:Connect(function()
