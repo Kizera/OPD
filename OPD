@@ -1,43 +1,41 @@
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
+local userId = player.UserId
+local userDataFolder = workspace:WaitForChild("UserData"):WaitForChild("User_" .. userId)
 
 -- ตัวแปรสถานะ
 _G.AutoMagma = _G.AutoMagma or false
 _G.AutoRespawn = _G.AutoRespawn or false
 _G.AutoTPVokun = _G.AutoTPVokun or false
+_G.AutoHaki = _G.AutoHaki or false
 
 -- พิกัดบอส Vokun
 local FarmPos = Vector3.new(4571, 221, 5122)
 
--- === 1. ระบบเช็คสถานะและจัดการตำแหน่ง (The Heart of V11) ===
+-- === 1. ระบบเช็คสถานะและจัดการตำแหน่ง (Vokun Lock) ===
 task.spawn(function()
-    while task.wait(0.5) do -- เช็คทุกๆ 0.5 วินาที (ไม่กินสเปคแต่ไวพอ)
+    while task.wait(0.5) do
         if _G.AutoTPVokun then
             pcall(function()
                 local char = player.Character
                 local hum = char and char:FindFirstChild("Humanoid")
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 
-                -- เงื่อนไขที่ 1: ถ้าเลือดหมด หรือ ตัวละครหายไป (ตาย)
                 if not char or not hum or hum.Health <= 0 then
                     if _G.AutoRespawn then
-                        -- วนลูปส่งคำสั่งเกิดใหม่ 0-9
                         for i = 0, 9 do
                             game:GetService("ReplicatedStorage").Connections.Spawn:FireServer(i)
                         end
                     end
-                
-                -- เงื่อนไขที่ 2: ถ้ายังไม่ตาย แต่ตำแหน่งอยู่ห่างจากจุดฟาร์มเกิน 10 หน่วย (เช่น อยู่ที่ Lobby)
                 elseif hrp and (hrp.Position - FarmPos).Magnitude > 10 then
                     hrp.CFrame = CFrame.new(FarmPos)
-                    print("ตรวจพบตำแหน่งเพี้ยน! กระชากกลับจุดฟาร์ม Vokun เรียบร้อย")
                 end
             end)
         end
     end
 end)
 
--- === 2. ระบบสกิล Magma (ยิงไปข้างหน้าตัวละคร) ===
+-- === 2. ระบบสกิล Magma (ยิงไปข้างหน้า) ===
 local function fireMagma()
     pcall(function()
         local char = player.Character
@@ -64,15 +62,46 @@ task.spawn(function()
     end
 end)
 
--- === 3. GUI Layout V11 ===
+-- === 3. ระบบ Safe Haki Farm (คำนวณเลือดกันตาย) ===
+task.spawn(function()
+    while task.wait(0.5) do
+        if _G.AutoHaki then
+            pcall(function()
+                local char = player.Character
+                local hum = char and char:FindFirstChild("Humanoid")
+                
+                if hum and hum.Health > 0 then
+                    -- คำนวณเลเวลฮาคิสูงสุดที่เลือดเราจ่ายไหว (เหลือเลือดก้นหลอดไว้ 500)
+                    local safeLevel = math.floor((hum.Health - 500) / 20)
+                    if safeLevel < 248 then safeLevel = 248 end -- ล็อคขั้นต่ำไว้ที่ 248
+                    
+                    local kenRemote = userDataFolder:FindFirstChild("III")
+                    local busoRemote = userDataFolder:FindFirstChild("UpdateHaki")
+                    
+                    if kenRemote and busoRemote then
+                        -- เปิด Ken Haki
+                        kenRemote:FireServer("On", safeLevel)
+                        -- สแปม Update Buso รับ EXP
+                        busoRemote:FireServer()
+                        task.wait(0.2)
+                        -- ปิด Ken Haki
+                        kenRemote:FireServer("Off", safeLevel)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- === 4. GUI Layout V12 ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaVokun_V11"
+ScreenGui.Name = "LunaVokun_V12"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 220, 0, 250)
-MainFrame.Position = UDim2.new(0.5, -110, 0.5, -125)
+MainFrame.Size = UDim2.new(0, 220, 0, 310) -- ขยายขนาดรองรับปุ่มใหม่
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -155)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -80,7 +109,7 @@ MainFrame.Parent = ScreenGui
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Text = "⚡ Vokun Boss V11"
+Title.Text = "⚡ Vokun + Haki V12"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
 Title.Parent = MainFrame
@@ -104,6 +133,7 @@ end
 createBtn("Auto TP & Lock Pos", UDim2.new(0, 10, 0, 50), "AutoTPVokun")
 createBtn("Auto Spawn 0-9", UDim2.new(0, 10, 0, 110), "AutoRespawn")
 createBtn("Magma Auto Nuke", UDim2.new(0, 10, 0, 170), "AutoMagma")
+createBtn("Safe Haki Farm", UDim2.new(0, 10, 0, 230), "AutoHaki") -- ปุ่มใหม่!
 
 local ToggleUI = Instance.new("TextButton")
 ToggleUI.Size = UDim2.new(0, 80, 0, 30)
