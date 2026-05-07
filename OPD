@@ -1,5 +1,6 @@
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser") -- เรียกใช้ระบบจำลองการกดเมาส์
 
 -- ตัวแปรสถานะ
 _G.AutoWarp = _G.AutoWarp or false
@@ -34,11 +35,7 @@ local function fireSkillV()
         local char = player.Character
         if not char then return end
         local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
-        
-        if remote then
-            -- สกิล V ยิงแค่ชื่อสกิล ไม่ต้องการพิกัด
-            remote:FireServer("FlarePower4")
-        end
+        if remote then remote:FireServer("FlarePower4") end
     end)
 end
 
@@ -50,25 +47,21 @@ local function fireSkillB()
         local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
         
         if remote and hrp then
-            -- จังหวะที่ 1: เริ่มชาร์จ (ลงเท้าตัวเอง)
             remote:FireServer("FlarePower5", "StartCharging", hrp.CFrame, hrp, "Left")
-            
-            task.wait(0.1) -- หน่วงเวลาชาร์จ 0.1 วิ (ปรับให้เร็วสุดเท่าที่ดาเมจจะออก)
-            
-            -- จังหวะที่ 2: ปล่อยพลัง (ลงเท้าตัวเอง)
+            task.wait(0.1)
             remote:FireServer("FlarePower5", "StopCharging", hrp.CFrame, hrp, 6)
         end
     end)
 end
 
 task.spawn(function()
-    while task.wait(0.5) do -- สแปมทุกๆ 0.5 วินาที
+    while task.wait(0.5) do
         if _G.AutoSkillV then fireSkillV() end
         if _G.AutoSkillB then fireSkillB() end
     end
 end)
 
--- === 3. ระบบทำงานอื่นๆ ===
+-- === 3. ระบบทำงานอื่นๆ (รวม Fixed Auto Click) ===
 task.spawn(function()
     while task.wait(1) do
         local char = player.Character
@@ -79,19 +72,28 @@ task.spawn(function()
     end
 end)
 
+-- โซน Auto Equip & Auto Click ที่แก้ไขใหม่
 task.spawn(function()
     while task.wait(0.1) do
         local char = player.Character
+        
+        -- Auto Equip
         if char and _G.AutoEquip then
             local tool = player.Backpack:FindFirstChild("Krizma")
             if tool then char.Humanoid:EquipTool(tool) end
         end
+        
+        -- Auto Click แบบจำลองการคลิกเมาส์ซ้าย
         if char and _G.AutoClick and char:FindFirstChild("Krizma") then
-            char.Krizma:Activate()
+            -- ส่งคำสั่งคลิกเมาส์ซ้ายลงที่กลางจอ
+            VirtualUser:Button1Down(Vector2.new(0,0))
+            task.wait(0.05)
+            VirtualUser:Button1Up(Vector2.new(0,0))
         end
     end
 end)
 
+-- Auto Warp
 task.spawn(function()
     while task.wait() do
         if _G.AutoWarp then
@@ -117,7 +119,7 @@ end)
 
 -- === 4. GUI Layout ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaKrizmaV7"
+ScreenGui.Name = "LunaKrizmaV8"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ResetOnSpawn = false
 
