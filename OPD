@@ -4,32 +4,35 @@ local RunService = game:GetService("RunService")
 -- ตัวแปรสถานะ
 _G.AutoMagma = _G.AutoMagma or false
 _G.AutoRespawn = _G.AutoRespawn or false
-_G.AutoEquip = _G.AutoEquip or false
-_G.AutoClick = _G.AutoClick or false
-_G.GhostMode = _G.GhostMode or false
+_G.AutoTPVokun = _G.AutoTPVokun or false
 
--- พิกัดจุดยืนฟาร์ม (ลูกพี่กำหนด)
+-- พิกัดบอส Vokun
 local FarmPos = Vector3.new(4571, 221, 5122)
 
--- === 1. ระบบเกิดใหม่ (วนลูป 0-9) และวาร์ปกลับที่เดิม ===
-local function handleRespawn()
-    pcall(function()
-        local spawnRemote = game:GetService("ReplicatedStorage"):WaitForChild("Connections"):WaitForChild("Spawn")
-        -- วนลูปเกิด 0-9 ตามที่ลูกพี่ต้องการ
-        for i = 0, 9 do
-            spawnRemote:FireServer(i)
-        end
-    end)
-end
-
--- เช็คการเกิดใหม่
-player.CharacterAdded:Connect(function(char)
-    if _G.AutoRespawn then
-        local hrp = char:WaitForChild("HumanoidRootPart", 10)
-        if hrp then
-            task.wait(0.5) -- รอให้ฟิสิกส์โหลดแป๊บหนึ่ง
-            hrp.CFrame = CFrame.new(FarmPos) -- วาร์ปกลับจุดฟาร์มทันที
-            print("วาร์ปกลับจุดเดิมเรียบร้อย!")
+-- === 1. ระบบเช็คสถานะและจัดการตำแหน่ง (The Heart of V11) ===
+task.spawn(function()
+    while task.wait(0.5) do -- เช็คทุกๆ 0.5 วินาที (ไม่กินสเปคแต่ไวพอ)
+        if _G.AutoTPVokun then
+            pcall(function()
+                local char = player.Character
+                local hum = char and char:FindFirstChild("Humanoid")
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                
+                -- เงื่อนไขที่ 1: ถ้าเลือดหมด หรือ ตัวละครหายไป (ตาย)
+                if not char or not hum or hum.Health <= 0 then
+                    if _G.AutoRespawn then
+                        -- วนลูปส่งคำสั่งเกิดใหม่ 0-9
+                        for i = 0, 9 do
+                            game:GetService("ReplicatedStorage").Connections.Spawn:FireServer(i)
+                        end
+                    end
+                
+                -- เงื่อนไขที่ 2: ถ้ายังไม่ตาย แต่ตำแหน่งอยู่ห่างจากจุดฟาร์มเกิน 10 หน่วย (เช่น อยู่ที่ Lobby)
+                elseif hrp and (hrp.Position - FarmPos).Magnitude > 10 then
+                    hrp.CFrame = CFrame.new(FarmPos)
+                    print("ตรวจพบตำแหน่งเพี้ยน! กระชากกลับจุดฟาร์ม Vokun เรียบร้อย")
+                end
+            end)
         end
     end
 end)
@@ -43,71 +46,48 @@ local function fireMagma()
         local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Magma") and char.Powers.Magma:FindFirstChild("RemoteEvent")
         
         if remote and hrp then
-            -- คำนวณตำแหน่งด้านหน้าตัวละคร 10 หน่วย
             local forwardPos = hrp.CFrame * CFrame.new(0, 0, -10)
-            
-            -- ปรับโครงสร้าง Argument ให้เล็งไปข้างหน้าเสมอ
             local args = {
                 "MagmaPower4",
                 "Create",
-                forwardPos, -- ส่งตำแหน่งด้านหน้าเราไปแทนตำแหน่งเมาส์
-                workspace:FindFirstChild("Enemies") -- เล็งเข้าโฟลเดอร์ศัตรูโดยรวม
+                forwardPos,
+                workspace:FindFirstChild("Enemies")
             }
             remote:FireServer(unpack(args))
         end
     end)
 end
 
--- === 3. ลูปการทำงานหลัก ===
 task.spawn(function()
-    while task.wait(1) do
-        local char = player.Character
-        if _G.AutoRespawn then
-            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then
-                handleRespawn()
-            end
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.5) do -- สแปมสกิล Magma ทุก 0.5 วิ
+    while task.wait(0.5) do
         if _G.AutoMagma then fireMagma() end
     end
 end)
 
-task.spawn(function()
-    while task.wait(0.1) do
-        local char = player.Character
-        if char and _G.AutoEquip then
-            local tool = player.Backpack:FindFirstChild("Krizma")
-            if tool then char.Humanoid:EquipTool(tool) end
-        end
-        if char and _G.AutoClick then
-            game:GetService("VirtualUser"):Button1Down(Vector2.new(0,0))
-            task.wait(0.05)
-            game:GetService("VirtualUser"):Button1Up(Vector2.new(0,0))
-        end
-    end
-end)
-
--- === 4. GUI Layout V9 ===
+-- === 3. GUI Layout V11 ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaXL_V9"
+ScreenGui.Name = "LunaVokun_V11"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 220, 0, 350)
-MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 0, 0) -- สีโทน Magma
+MainFrame.Size = UDim2.new(0, 220, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Text = "⚡ Vokun Boss V11"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
+Title.Parent = MainFrame
+
 local function createBtn(text, pos, varName)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.Size = UDim2.new(1, -20, 0, 45)
     btn.Position = pos
     btn.Text = text .. (_G[varName] and " (ON)" or " (OFF)")
     btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
@@ -121,15 +101,13 @@ local function createBtn(text, pos, varName)
     return btn
 end
 
-createBtn("Magma Auto Nuke", UDim2.new(0, 10, 0, 50), "AutoMagma")
-createBtn("Smart Auto Respawn", UDim2.new(0, 10, 0, 100), "AutoRespawn")
-createBtn("Auto Equip", UDim2.new(0, 10, 0, 150), "AutoEquip")
-createBtn("Auto Click", UDim2.new(0, 10, 0, 200), "AutoClick")
+createBtn("Auto TP & Lock Pos", UDim2.new(0, 10, 0, 50), "AutoTPVokun")
+createBtn("Auto Spawn 0-9", UDim2.new(0, 10, 0, 110), "AutoRespawn")
+createBtn("Magma Auto Nuke", UDim2.new(0, 10, 0, 170), "AutoMagma")
 
-local Label = Instance.new("TextLabel")
-Label.Size = UDim2.new(1, 0, 0, 30)
-Label.Text = "Fixed Pos: 4571, 221, 5122"
-Label.TextColor3 = Color3.fromRGB(255, 255, 0)
-Label.BackgroundTransparency = 1
-Label.Position = UDim2.new(0, 0, 0, 260)
-Label.Parent = MainFrame
+local ToggleUI = Instance.new("TextButton")
+ToggleUI.Size = UDim2.new(0, 80, 0, 30)
+ToggleUI.Position = UDim2.new(0, 10, 0.9, -10)
+ToggleUI.Text = "Menu"
+ToggleUI.Parent = ScreenGui
+ToggleUI.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
