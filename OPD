@@ -1,12 +1,11 @@
-local player = game.Players.LocalPlayer
+local player = game:GetService("Players").LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
-local expandHitbox = false
+local autoKill = false
 local platform = nil
-local MaxSize = 2048 -- ขนาดกว้างสุดที่ขยายได้
 
--- === 1. ระบบสร้างพื้นที่ลอยฟ้า (Safe Zone) ===
+-- === 1. ระบบฐานลอยฟ้า ===
 local function createSkyBase()
     if not platform then
         platform = Instance.new("Part")
@@ -17,23 +16,39 @@ local function createSkyBase()
         platform.Material = Enum.Material.Neon
         platform.Parent = workspace
     end
-    -- วาร์ปตัวเราขึ้นไป
     rootPart.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
 end
 
--- === 2. ระบบขยาย Hitbox มอนสเตอร์ (ลดอาการแลค) ===
+-- === 2. ระบบ Kill Aura (ยิง Remote ตรง ไม่แลค) ===
 task.spawn(function()
-    while task.wait(1) do
-        if expandHitbox then
+    while task.wait(0.1) do -- สแปมทุก 0.1 วินาที
+        if autoKill then
             pcall(function()
-                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                    if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+                local char = player.Character
+                if not char then return end
+                
+                -- ตรวจหา Remote สกิล Flare ในตัวละครเรา
+                local powers = char:FindFirstChild("Powers")
+                local flare = powers and powers:FindFirstChild("Flare")
+                local remote = flare and flare:FindFirstChild("RemoteEvent")
+                
+                if remote then
+                    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
                         local hum = enemy:FindFirstChild("Humanoid")
-                        if hum and hum.Health > 0 then
-                            local hrp = enemy.HumanoidRootPart
-                            hrp.Size = Vector3.new(MaxSize, MaxSize, MaxSize)
-                            hrp.Transparency = 0.95 -- โปรงใสจะได้ไม่บังจอขาว
-                            hrp.CanCollide = false -- ปิดการชนเพื่อลดการคำนวณฟิสิกส์
+                        -- เล็งไปที่ Torso ตามโค้ดต้นฉบับ ถ้าไม่มีให้เล็ง RootPart แทน
+                        local targetPart = enemy:FindFirstChild("Torso") or enemy:FindFirstChild("HumanoidRootPart")
+                        
+                        if hum and hum.Health > 0 and targetPart then
+                            -- สร้างชุดคำสั่งส่งไปยิงมอนสเตอร์ทีละตัว
+                            local args = {
+                                "FlarePower2",
+                                "StopCharging",
+                                targetPart.CFrame, -- ยัด CFrame ทับตัวมอนไปเลยเพื่อความแม่นยำ
+                                targetPart, -- ชิ้นส่วนที่โดนดาเมจ
+                                4
+                            }
+                            -- ยิงคำสั่งโจมตีใส่เซิร์ฟเวอร์
+                            remote:FireServer(unpack(args))
                         end
                     end
                 end
@@ -44,10 +59,10 @@ end)
 
 -- === 3. สร้าง GUI ควบคุม ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaProjectXL_NoLag"
+ScreenGui.Name = "LunaXL_KillAura"
 ScreenGui.Parent = game.CoreGui
 
--- ปุ่มเปิด/ปิด GUI (ล่างซ้าย)
+-- ปุ่มซ่อน/แสดงเมนู
 local ToggleUI = Instance.new("TextButton")
 ToggleUI.Name = "ToggleUI"
 ToggleUI.Parent = ScreenGui
@@ -69,18 +84,18 @@ MainFrame.Draggable = true
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "Luna XL: No-Lag Farm"
+Title.Text = "Luna XL: 0% Lag Aura"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.BackgroundTransparency = 1
 Title.Parent = MainFrame
 
--- ปุ่ม Hitbox
-local HitboxBtn = Instance.new("TextButton")
-HitboxBtn.Size = UDim2.new(0.8, 0, 0, 40)
-HitboxBtn.Position = UDim2.new(0.1, 0, 0.25, 0)
-HitboxBtn.Text = "เปิด Hitbox คลุมแมพ"
-HitboxBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-HitboxBtn.Parent = MainFrame
+-- ปุ่ม Auto Kill
+local KillBtn = Instance.new("TextButton")
+KillBtn.Size = UDim2.new(0.8, 0, 0, 40)
+KillBtn.Position = UDim2.new(0.1, 0, 0.25, 0)
+KillBtn.Text = "เปิด Kill Aura"
+KillBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+KillBtn.Parent = MainFrame
 
 -- ปุ่มฐานลอยฟ้า
 local SkyBtn = Instance.new("TextButton")
@@ -90,15 +105,15 @@ SkyBtn.Text = "ขึ้นฐานลอยฟ้า (SKY)"
 SkyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 SkyBtn.Parent = MainFrame
 
--- โค้ดปุ่มทำงาน
-HitboxBtn.MouseButton1Click:Connect(function()
-    expandHitbox = not expandHitbox
-    if expandHitbox then
-        HitboxBtn.Text = "ปิด Hitbox"
-        HitboxBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+-- ระบบทำงานของปุ่ม
+KillBtn.MouseButton1Click:Connect(function()
+    autoKill = not autoKill
+    if autoKill then
+        KillBtn.Text = "ปิด Kill Aura"
+        KillBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
     else
-        HitboxBtn.Text = "เปิด Hitbox คลุมแมพ"
-        HitboxBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        KillBtn.Text = "เปิด Kill Aura"
+        KillBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
     end
 end)
 
