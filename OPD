@@ -1,145 +1,113 @@
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local VirtualUser = game:GetService("VirtualUser") -- เรียกใช้ระบบจำลองการกดเมาส์
 
 -- ตัวแปรสถานะ
-_G.AutoWarp = _G.AutoWarp or false
+_G.AutoMagma = _G.AutoMagma or false
+_G.AutoRespawn = _G.AutoRespawn or false
 _G.AutoEquip = _G.AutoEquip or false
 _G.AutoClick = _G.AutoClick or false
-_G.AutoRespawn = _G.AutoRespawn or false
 _G.GhostMode = _G.GhostMode or false
-_G.AutoSkillB = _G.AutoSkillB or false
-_G.AutoSkillV = _G.AutoSkillV or false
 
-local selectedMobs = {}
+-- พิกัดจุดยืนฟาร์ม (ลูกพี่กำหนด)
+local FarmPos = Vector3.new(4571, 221, 5122)
 
--- === 1. ฟังก์ชันจัดการตัวละคร ===
-local function getCharacter()
-    return player.Character or player.CharacterAdded:Wait()
-end
-
-local function applyGhostMode(char)
-    if _G.GhostMode then
-        task.wait(0.5)
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                part.Transparency = 1
-            elseif part:IsA("Decal") then part.Transparency = 1 end
-        end
-    end
-end
-
--- === 2. ระบบ Auto Skills (Flare V & B) ===
-local function fireSkillV()
+-- === 1. ระบบเกิดใหม่ (วนลูป 0-9) และวาร์ปกลับที่เดิม ===
+local function handleRespawn()
     pcall(function()
-        local char = player.Character
-        if not char then return end
-        local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
-        if remote then remote:FireServer("FlarePower4") end
+        local spawnRemote = game:GetService("ReplicatedStorage"):WaitForChild("Connections"):WaitForChild("Spawn")
+        -- วนลูปเกิด 0-9 ตามที่ลูกพี่ต้องการ
+        for i = 0, 9 do
+            spawnRemote:FireServer(i)
+        end
     end)
 end
 
-local function fireSkillB()
+-- เช็คการเกิดใหม่
+player.CharacterAdded:Connect(function(char)
+    if _G.AutoRespawn then
+        local hrp = char:WaitForChild("HumanoidRootPart", 10)
+        if hrp then
+            task.wait(0.5) -- รอให้ฟิสิกส์โหลดแป๊บหนึ่ง
+            hrp.CFrame = CFrame.new(FarmPos) -- วาร์ปกลับจุดฟาร์มทันที
+            print("วาร์ปกลับจุดเดิมเรียบร้อย!")
+        end
+    end
+end)
+
+-- === 2. ระบบสกิล Magma (ยิงไปข้างหน้าตัวละคร) ===
+local function fireMagma()
     pcall(function()
         local char = player.Character
         if not char then return end
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Flare") and char.Powers.Flare:FindFirstChild("RemoteEvent")
+        local remote = char:FindFirstChild("Powers") and char.Powers:FindFirstChild("Magma") and char.Powers.Magma:FindFirstChild("RemoteEvent")
         
         if remote and hrp then
-            remote:FireServer("FlarePower5", "StartCharging", hrp.CFrame, hrp, "Left")
-            task.wait(0.1)
-            remote:FireServer("FlarePower5", "StopCharging", hrp.CFrame, hrp, 6)
+            -- คำนวณตำแหน่งด้านหน้าตัวละคร 10 หน่วย
+            local forwardPos = hrp.CFrame * CFrame.new(0, 0, -10)
+            
+            -- ปรับโครงสร้าง Argument ให้เล็งไปข้างหน้าเสมอ
+            local args = {
+                "MagmaPower4",
+                "Create",
+                forwardPos, -- ส่งตำแหน่งด้านหน้าเราไปแทนตำแหน่งเมาส์
+                workspace:FindFirstChild("Enemies") -- เล็งเข้าโฟลเดอร์ศัตรูโดยรวม
+            }
+            remote:FireServer(unpack(args))
         end
     end)
 end
 
-task.spawn(function()
-    while task.wait(0.5) do
-        if _G.AutoSkillV then fireSkillV() end
-        if _G.AutoSkillB then fireSkillB() end
-    end
-end)
-
--- === 3. ระบบทำงานอื่นๆ (รวม Fixed Auto Click) ===
+-- === 3. ลูปการทำงานหลัก ===
 task.spawn(function()
     while task.wait(1) do
         local char = player.Character
-        if _G.AutoRespawn and (not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0) then
-            pcall(function() game:GetService("ReplicatedStorage").Connections.Spawn:FireServer(2) end)
+        if _G.AutoRespawn then
+            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then
+                handleRespawn()
+            end
         end
-        if char and _G.GhostMode then applyGhostMode(char) end
     end
 end)
 
--- โซน Auto Equip & Auto Click ที่แก้ไขใหม่
+task.spawn(function()
+    while task.wait(0.5) do -- สแปมสกิล Magma ทุก 0.5 วิ
+        if _G.AutoMagma then fireMagma() end
+    end
+end)
+
 task.spawn(function()
     while task.wait(0.1) do
         local char = player.Character
-        
-        -- Auto Equip
         if char and _G.AutoEquip then
             local tool = player.Backpack:FindFirstChild("Krizma")
             if tool then char.Humanoid:EquipTool(tool) end
         end
-        
-        -- Auto Click แบบจำลองการคลิกเมาส์ซ้าย
-        if char and _G.AutoClick and char:FindFirstChild("Krizma") then
-            -- ส่งคำสั่งคลิกเมาส์ซ้ายลงที่กลางจอ
-            VirtualUser:Button1Down(Vector2.new(0,0))
+        if char and _G.AutoClick then
+            game:GetService("VirtualUser"):Button1Down(Vector2.new(0,0))
             task.wait(0.05)
-            VirtualUser:Button1Up(Vector2.new(0,0))
+            game:GetService("VirtualUser"):Button1Up(Vector2.new(0,0))
         end
     end
 end)
 
--- Auto Warp
-task.spawn(function()
-    while task.wait() do
-        if _G.AutoWarp then
-            pcall(function()
-                local char = getCharacter()
-                local hrp = char:WaitForChild("HumanoidRootPart", 5)
-                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                    if selectedMobs[enemy.Name] and _G.AutoWarp then
-                        local hum = enemy:FindFirstChild("Humanoid")
-                        local ehrp = enemy:FindFirstChild("HumanoidRootPart")
-                        if hum and hum.Health > 0 and ehrp then
-                            while hum.Health > 0 and _G.AutoWarp and char.Humanoid.Health > 0 do
-                                hrp.CFrame = ehrp.CFrame * CFrame.new(0, 0, 3.5)
-                                task.wait(0.01)
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- === 4. GUI Layout ===
+-- === 4. GUI Layout V9 ===
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LunaKrizmaV8"
+ScreenGui.Name = "LunaXL_V9"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ResetOnSpawn = false
 
-local ToggleMenuBtn = Instance.new("TextButton")
-ToggleMenuBtn.Size = UDim2.new(0, 100, 0, 30)
-ToggleMenuBtn.Position = UDim2.new(0, 10, 0.9, -10)
-ToggleMenuBtn.Text = "Menu"
-ToggleMenuBtn.Parent = ScreenGui
-
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 250, 0, 580)
-MainFrame.Position = UDim2.new(0.5, -125, 0.5, -290)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Size = UDim2.new(0, 220, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 0, 0) -- สีโทน Magma
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
 local function createBtn(text, pos, varName)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 35)
+    btn.Size = UDim2.new(1, -20, 0, 40)
     btn.Position = pos
     btn.Text = text .. (_G[varName] and " (ON)" or " (OFF)")
     btn.BackgroundColor3 = _G[varName] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
@@ -153,51 +121,15 @@ local function createBtn(text, pos, varName)
     return btn
 end
 
-createBtn("Auto Warp", UDim2.new(0, 10, 0, 40), "AutoWarp")
-createBtn("Auto Equip Krizma", UDim2.new(0, 10, 0, 80), "AutoEquip")
-createBtn("Auto Click", UDim2.new(0, 10, 0, 120), "AutoClick")
-createBtn("Auto Respawn", UDim2.new(0, 10, 0, 160), "AutoRespawn")
-createBtn("Ghost Mode", UDim2.new(0, 10, 0, 200), "GhostMode")
-createBtn("Auto Skill B (Flare Nuke)", UDim2.new(0, 10, 0, 240), "AutoSkillB")
-createBtn("Auto Skill V (Flare Burst)", UDim2.new(0, 10, 0, 280), "AutoSkillV")
+createBtn("Magma Auto Nuke", UDim2.new(0, 10, 0, 50), "AutoMagma")
+createBtn("Smart Auto Respawn", UDim2.new(0, 10, 0, 100), "AutoRespawn")
+createBtn("Auto Equip", UDim2.new(0, 10, 0, 150), "AutoEquip")
+createBtn("Auto Click", UDim2.new(0, 10, 0, 200), "AutoClick")
 
-local MobListScroll = Instance.new("ScrollingFrame")
-MobListScroll.Size = UDim2.new(1, -20, 1, -380)
-MobListScroll.Position = UDim2.new(0, 10, 0, 325)
-MobListScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-MobListScroll.Parent = MainFrame
-
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = MobListScroll
-
-local RefreshBtn = Instance.new("TextButton")
-RefreshBtn.Size = UDim2.new(1, -20, 0, 30)
-RefreshBtn.Position = UDim2.new(0, 10, 1, -40)
-RefreshBtn.Text = "Refresh Mobs"
-RefreshBtn.Parent = MainFrame
-
-local function updateList()
-    for _, v in pairs(MobListScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-    local unique = {}
-    for _, e in pairs(workspace.Enemies:GetChildren()) do if not unique[e.Name] then unique[e.Name] = true end end
-    local sorted = {}
-    for name, _ in pairs(unique) do table.insert(sorted, {Name = name, Level = tonumber(string.match(name, "%d+")) or 0}) end
-    table.sort(sorted, function(a,b) return a.Level < b.Level end)
-    for _, data in ipairs(sorted) do
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, 0, 0, 30)
-        b.Text = data.Name
-        b.BackgroundColor3 = selectedMobs[data.Name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
-        b.TextColor3 = Color3.fromRGB(255, 255, 255)
-        b.Parent = MobListScroll
-        b.MouseButton1Click:Connect(function()
-            selectedMobs[data.Name] = not selectedMobs[data.Name]
-            b.BackgroundColor3 = selectedMobs[data.Name] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
-        end)
-    end
-    MobListScroll.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
-end
-
-RefreshBtn.MouseButton1Click:Connect(updateList)
-ToggleMenuBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
-updateList()
+local Label = Instance.new("TextLabel")
+Label.Size = UDim2.new(1, 0, 0, 30)
+Label.Text = "Fixed Pos: 4571, 221, 5122"
+Label.TextColor3 = Color3.fromRGB(255, 255, 0)
+Label.BackgroundTransparency = 1
+Label.Position = UDim2.new(0, 0, 0, 260)
+Label.Parent = MainFrame
